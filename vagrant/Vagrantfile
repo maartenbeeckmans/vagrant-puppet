@@ -1,0 +1,73 @@
+require 'yaml'
+
+# Set default LC_ALL for all boxes
+ENV["LC_ALL"] = "en_US.UTF-8"
+
+# Constants
+DEFAULT_BOX = "centos/8"
+VAGRANTFILE_API_VERSION = '2'
+PROJECTNAME = 'Vagrant-Puppet'
+REQUIRED_PLUGINS = ['vagrant-hostmanager', 'vagrant-libvirt']
+
+hosts = YAML.load_file('vagrant-hosts.yaml')
+
+Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
+  # Plugins management
+  REQUIRED_PLUGINS.each do |plugin|
+    unless Vagrant.has_plugin?(plugin)
+      raise plugin << " has not been installed."
+    end
+  end 
+
+  # Vagrant-hostmanager configuration
+  config.hostmanager.enabled = true
+  config.hostmanager.manage_host = true
+  config.hostmanager.manage_guest = true
+  config.hostmanager.ignore_private_ip = false
+  config.hostmanager.include_offline = true
+
+  # Puppet settings
+  if vagrant_config['puppet_environment']
+    environment = vagrant_config['puppet_environment']
+  else
+    environment = 'production'
+  end
+  if vagrant_config['puppet_version']
+    version = vagrant_config['puppet_version']
+  else
+    version = :latest
+  end
+  if Vagrant.has_plugin?("vagrant-puppet-install")
+    config.puppet_install.puppet_version = version
+  end
+
+  # Disable synced vagrant folder
+  config.vm.synced_folder ".", "/vagrant", disabled: true
+  # Host configuration
+  hosts.each do |host|
+    config.vm.define host['name'] do |node|
+      node.vm.box = host['box'] ||= DEFAULT_BOX
+      node.vm.hostname = host['hostname']
+      if host['ports']
+        host['ports'].each do |port|
+          node.vm.network :forwarded_port, guest: port['guest'], host: port['host']
+        end
+      end
+      node.vm.network :private_network,
+        :ip               => host['ip'],
+        :libvirt__netmask => host['netmask']
+      if host['synced_folders']
+        host['synced_folders'].each do |folder|
+          node.vm.synced_folder folder['srv'], folder['dst']
+        end
+      end
+      node.vm.provider :libvirt do |libvirt|
+        libvirt.memory = host['memory'] if host.key? 'memory'
+        libvirt.cpus = host['cpus'] if host.key? 'cpus'
+        libvirt.machine_arch = host['arch'] if host.key? 'arch'
+      end
+    end
+  end
+end
+
+# -*- mode: ruby -*-
