@@ -1,0 +1,15 @@
+---
+nodes:
+- name: puppetmaster
+  memory: 4096
+  cpus: 2
+  ip: 192.168.101.1
+  netmask: 255.255.255.0
+  environment_path: '../'
+  hiera_config_path: '../producton/hiera.yaml'
+  hiera_path: '../production/data'
+  hostname: puppetmaster.vagrant.local
+  synced_folders:
+    - src: '../production'
+      dst: '/etc/puppetlabs/code/environments/production' 
+puppet_environment: production
